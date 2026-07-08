@@ -379,23 +379,33 @@
         <input type="range" id="margen" min="0" max="50" step="0.5" value="20">
       </div>
 
+      <div class="subhead">ITBIS</div>
+
+      <div class="field">
+        <label for="itbis">ITBIS al cliente <span class="val" id="itbisVal"></span></label>
+        <input type="range" id="itbis" min="0" max="25" step="0.5" value="18">
+      </div>
+      <div class="checks" style="margin-bottom:16px">
+        <label><input type="checkbox" id="facIncItbis" checked> El factor FOB → landed incluye el ITBIS aduanal <span class="fixed">se descuenta: es crédito fiscal, no costo</span></label>
+      </div>
+
       <div class="alert" id="alertaImposible">
         No hay precio posible: las cargas más el margen alcanzan o superan el 98% del precio de venta. Baja alguna carga o el margen.
       </div>
 
       <div class="cards">
         <div class="bigcard">
-          <div class="label">Costo landed</div>
+          <div class="label">Costo landed (sin ITBIS)</div>
           <div class="value" id="landedOut">—</div>
           <div class="sub" id="landedSub"></div>
         </div>
         <div class="bigcard primary">
-          <div class="label">Precio de lista</div>
+          <div class="label">Precio de lista con ITBIS</div>
           <div class="value" id="listaOut">—</div>
           <div class="sub" id="listaSub"></div>
         </div>
         <div class="bigcard primary wide">
-          <div class="label">Factor total FOB → precio de lista</div>
+          <div class="label">Factor total FOB → precio de lista con ITBIS</div>
           <div class="value" id="factorTotalOut">—</div>
           <div class="sub" id="factorTotalSub"></div>
         </div>
@@ -428,7 +438,7 @@
           <div class="sub" id="margenResOut"></div>
         </div>
         <div class="bigcard">
-          <div class="label">Precio con promo</div>
+          <div class="label">Precio con promo (con ITBIS)</div>
           <div class="value" id="cobradoOut">—</div>
           <div class="sub" id="breakEvenOut"></div>
         </div>
@@ -473,6 +483,7 @@
     fob: 1000, factor: 1.60,
     tarjeta: 4.5, venta: 5, disenador: 10, operativos: 12,
     descBase: 10, margen: 20,
+    itbis: 18, facIncItbis: true,
     promo: 40,
     chkDisenador: false, chkVenta: true, chkTarjeta: true
   };
@@ -484,6 +495,7 @@
     tarjeta: $('tarjeta'), venta: $('venta'),
     disenador: $('disenador'), operativos: $('operativos'),
     descBase: $('descBase'), margen: $('margen'),
+    itbis: $('itbis'), facIncItbis: $('facIncItbis'),
     promo: $('promo'),
     chkDisenador: $('chkDisenador'), chkVenta: $('chkVenta'), chkTarjeta: $('chkTarjeta')
   };
@@ -531,11 +543,17 @@
     var pOperativos = num(inputs.operativos, 0) / 100;
     var descBase = num(inputs.descBase, 0) / 100;
     var margen = num(inputs.margen, 0) / 100;
+    var itbis = num(inputs.itbis, 0) / 100;
+    var incItbis = inputs.facIncItbis.checked;
     var promo = num(inputs.promo, 0) / 100;
+
+    // Tarjeta: el banco cobra sobre el voucher CON ITBIS → tasa efectiva sobre la base
+    var pTarjetaEf = pTarjeta * (1 + itbis);
 
     // --- Etiquetas de sliders ---
     $('factorVal').textContent = '×' + factor.toFixed(2);
-    $('tarjetaVal').textContent = pct(pTarjeta * 100);
+    $('itbisVal').textContent = pct(itbis * 100);
+    $('tarjetaVal').textContent = pct(pTarjeta * 100) + ' (efectivo ' + pct(pTarjetaEf * 100) + ')';
     $('ventaVal').textContent = pct(pVenta * 100);
     $('disenadorVal').textContent = pct(pDisenador * 100);
     $('operativosVal').textContent = pct(pOperativos * 100);
@@ -544,51 +562,56 @@
     $('promoVal').textContent = pct(promo * 100);
     $('chkDisenadorPct').textContent = '(' + pct(pDisenador * 100) + ')';
     $('chkVentaPct').textContent = '(' + pct(pVenta * 100) + ')';
-    $('chkTarjetaPct').textContent = '(' + pct(pTarjeta * 100) + ')';
+    $('chkTarjetaPct').textContent = '(' + pct(pTarjeta * 100) + ' s/bruto)';
     $('chkOperativosPct').textContent = '(' + pct(pOperativos * 100) + ')';
 
     // --- Sección 1: precio de lista ---
-    var landed = fob * factor;
-    var cargas = pTarjeta + pVenta + pDisenador + pOperativos;
+    // Si el factor trae el ITBIS aduanal, se descuenta: es crédito fiscal, no costo
+    var factorLimpio = incItbis ? factor / (1 + itbis) : factor;
+    var landed = fob * factorLimpio;
+    var cargas = pTarjetaEf + pVenta + pDisenador + pOperativos;
     var imposible = (cargas + margen) >= 0.98;
 
     $('alertaImposible').classList.toggle('show', imposible);
     $('landedOut').textContent = usd(landed);
-    $('landedSub').textContent = usd(fob) + ' × ' + factor.toFixed(2);
+    $('landedSub').textContent = incItbis
+      ? usd(fob) + ' × ' + factor.toFixed(2) + ' ÷ ' + (1 + itbis).toFixed(2) + ' (factor limpio ×' + factorLimpio.toFixed(2) + ')'
+      : usd(fob) + ' × ' + factor.toFixed(2);
 
     if (imposible) {
       $('listaOut').textContent = '—';
       $('listaSub').textContent = 'Cargas + margen = ' + pct((cargas + margen) * 100);
       $('factorTotalOut').textContent = '—';
       $('factorTotalSub').textContent = '';
-      renderPromo(null, landed, {}, promo);
+      renderPromo(null, landed, {}, promo, itbis);
       saveState();
       return;
     }
 
     var neto = landed / (1 - cargas - margen);
     var lista = neto / (1 - descBase);
-    var factorTotal = factor / ((1 - cargas - margen) * (1 - descBase));
-    var factorNeto = factor / (1 - cargas - margen);
+    var listaItbis = lista * (1 + itbis);
+    var factorLista = factorLimpio / ((1 - cargas - margen) * (1 - descBase));
+    var factorListaItbis = factorLista * (1 + itbis);
 
-    $('listaOut').textContent = usd(lista);
-    $('listaSub').textContent = 'Neto ' + usd(neto) + ' · desc. base ' + pct(descBase * 100);
-    $('factorTotalOut').textContent = '×' + factorTotal.toFixed(2);
-    $('factorTotalSub').textContent = 'FOB × ' + factorTotal.toFixed(2) + ' = precio de lista · a precio neto: ×' + factorNeto.toFixed(2);
+    $('listaOut').textContent = usd(listaItbis);
+    $('listaSub').textContent = 'Sin ITBIS ' + usd(lista) + ' · neto ' + usd(neto) + ' · desc. base ' + pct(descBase * 100);
+    $('factorTotalOut').textContent = '×' + factorListaItbis.toFixed(2);
+    $('factorTotalSub').textContent = 'FOB × ' + factorListaItbis.toFixed(2) + ' = precio en tienda con ITBIS · sin ITBIS: ×' + factorLista.toFixed(2);
 
-    // --- Sección 2: promo ---
+    // --- Sección 2: promo (toda la matemática interna en base sin ITBIS) ---
     var cargasPromo = {
-      tarjeta: { nombre: 'Tarjeta de crédito', p: pTarjeta, aplica: inputs.chkTarjeta.checked },
-      venta: { nombre: 'Comisión de venta', p: pVenta, aplica: inputs.chkVenta.checked },
-      disenador: { nombre: 'Comisión de diseñador', p: pDisenador, aplica: inputs.chkDisenador.checked },
-      operativos: { nombre: 'Costos operativos', p: pOperativos, aplica: true }
+      tarjeta: { nombre: 'Tarjeta de crédito', nota: pct(pTarjeta * 100) + ' s/monto con ITBIS', p: pTarjetaEf, aplica: inputs.chkTarjeta.checked },
+      venta: { nombre: 'Comisión de venta', nota: pct(pVenta * 100), p: pVenta, aplica: inputs.chkVenta.checked },
+      disenador: { nombre: 'Comisión de diseñador', nota: pct(pDisenador * 100), p: pDisenador, aplica: inputs.chkDisenador.checked },
+      operativos: { nombre: 'Costos operativos', nota: pct(pOperativos * 100), p: pOperativos, aplica: true }
     };
 
-    renderPromo(lista, landed, cargasPromo, promo);
+    renderPromo(lista, landed, cargasPromo, promo, itbis);
     saveState();
   }
 
-  function renderPromo(lista, landed, cargasPromo, promo) {
+  function renderPromo(lista, landed, cargasPromo, promo, itbis) {
     var cardRes = $('cardResultado');
     var body = $('desgloseBody');
 
@@ -610,11 +633,12 @@
     });
 
     var cobrado = lista * (1 - promo);
+    var cobradoItbis = cobrado * (1 + itbis);
     var resultado = cobrado * (1 - cargasEf) - landed;
     var margenRes = cobrado > 0 ? (resultado / cobrado) * 100 : 0;
     var breakEven = 1 - landed / ((1 - cargasEf) * lista);
 
-    $('cobradoOut').textContent = usd(cobrado);
+    $('cobradoOut').textContent = usd(cobradoItbis);
     $('breakEvenOut').textContent = 'Break even: ' + (breakEven >= 0 ? pct(breakEven * 100) : 'imposible') + ' de descuento';
     $('resultadoOut').textContent = (resultado < 0 ? '−' : '') + usd(Math.abs(resultado));
     $('margenResOut').textContent = 'Margen resultante: ' + pct(margenRes);
@@ -625,11 +649,13 @@
 
     // --- Tabla de desglose ---
     var rows = [];
-    rows.push('<tr><td>Precio cobrado (lista − ' + pct(promo * 100) + ')</td><td class="amt">' + usd(cobrado) + '</td></tr>');
+    rows.push('<tr><td>Cliente paga (con ITBIS, lista − ' + pct(promo * 100) + ')</td><td class="amt">' + usd(cobradoItbis) + '</td></tr>');
+    rows.push('<tr><td>− ITBIS (' + pct(itbis * 100) + ') para la DGII</td><td class="amt neg">− ' + usd(cobradoItbis - cobrado) + '</td></tr>');
+    rows.push('<tr><td>= Venta base sin ITBIS</td><td class="amt">' + usd(cobrado) + '</td></tr>');
     ['tarjeta', 'venta', 'disenador', 'operativos'].forEach(function (k) {
       var c = cargasPromo[k];
       if (c.aplica) {
-        rows.push('<tr><td>− ' + c.nombre + ' (' + pct(c.p * 100) + ')</td><td class="amt neg">− ' + usd(cobrado * c.p) + '</td></tr>');
+        rows.push('<tr><td>− ' + c.nombre + ' (' + c.nota + ')</td><td class="amt neg">− ' + usd(cobrado * c.p) + '</td></tr>');
       } else {
         rows.push('<tr class="skip"><td>− ' + c.nombre + ' (no aplica)</td><td class="amt">US$ 0.00</td></tr>');
       }
