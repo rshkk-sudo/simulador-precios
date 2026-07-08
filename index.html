@@ -189,6 +189,17 @@
   .bigcard.primary { background: var(--accent-soft); border-color: var(--accent); }
   .bigcard.primary .value { color: var(--accent); }
   .bigcard.wide { grid-column: 1 / -1; }
+  .panel.full { grid-column: 1 / -1; }
+  .cards.three { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 720px) { .cards.three { grid-template-columns: 1fr; } }
+  .fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 720px) { .fields-row { grid-template-columns: 1fr; } }
+  .bar .zone-amber {
+    position: absolute;
+    top: 0; bottom: 0;
+    background: #d97706;
+    opacity: .78;
+  }
   .bigcard.good { background: var(--green-bg); border-color: var(--green-border); }
   .bigcard.good .value { color: var(--green); }
   .bigcard.bad { background: var(--red-bg); border-color: var(--red-border); }
@@ -470,6 +481,62 @@
       </table>
     </section>
 
+    <!-- ============ SECCIÓN 3 ============ -->
+    <section class="panel full">
+      <h2><span class="num">3</span> Recuperación de inventario</h2>
+
+      <div class="fields-row">
+        <div class="field">
+          <label for="inv">Costo total del inventario (landed, sin ITBIS, US$)</label>
+          <input type="number" id="inv" min="0" step="5000" value="100000">
+        </div>
+        <div class="field">
+          <label for="descProm">Descuento promedio real sobre lista <span class="val" id="descPromVal"></span></label>
+          <input type="range" id="descProm" min="0" max="40" step="0.5" value="10">
+        </div>
+      </div>
+
+      <div class="cards three">
+        <div class="bigcard">
+          <div class="label">Breakeven de cash (operativos como % de venta)</div>
+          <div class="value" id="beVarOut">—</div>
+          <div class="sub" id="beVarSub"></div>
+        </div>
+        <div class="bigcard">
+          <div class="label">Breakeven de cash (operativos fijos)</div>
+          <div class="value" id="beFixOut">—</div>
+          <div class="sub" id="beFixSub"></div>
+        </div>
+        <div class="bigcard good" id="cardGananciaInv">
+          <div class="label">Si vendes todo el inventario</div>
+          <div class="value" id="ganTotalOut">—</div>
+          <div class="sub" id="ganTotalSub"></div>
+        </div>
+      </div>
+
+      <div class="bewrap">
+        <div class="betitle">
+          <span>Inventario vendido (% a costo)</span>
+          <span id="invBarLabel"></span>
+        </div>
+        <div class="bar" id="invBar">
+          <div class="zone-red" id="invZoneRed" style="left:0; right:auto; border-radius:13px 0 0 13px;"></div>
+          <div class="zone-amber" id="invZoneAmber"></div>
+          <div class="zone-green" id="invZoneGreen" style="left:auto; right:0; border-radius:0 13px 13px 0;"></div>
+          <div class="be-marker" id="invMarkFix"></div>
+          <div class="be-flag" id="invFlagFix"></div>
+          <div class="be-marker" id="invMarkVar"></div>
+          <div class="be-flag" id="invFlagVar" style="top:auto; bottom:-28px;"></div>
+        </div>
+        <div class="bar-scale" style="margin-top:32px">
+          <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+        </div>
+        <div class="betitle" style="margin-top:10px">
+          <span>Rojo: aún no recuperas · Ámbar: recuperado solo si los operativos son fijos · Verde: recuperado en ambos escenarios</span>
+        </div>
+      </div>
+    </section>
+
   </div>
 </div>
 
@@ -485,7 +552,8 @@
     descBase: 10, margen: 20,
     itbis: 18, facIncItbis: true,
     promo: 40,
-    chkDisenador: false, chkVenta: true, chkTarjeta: true
+    chkDisenador: false, chkVenta: true, chkTarjeta: true,
+    inv: 100000, descProm: 10
   };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -497,7 +565,8 @@
     descBase: $('descBase'), margen: $('margen'),
     itbis: $('itbis'), facIncItbis: $('facIncItbis'),
     promo: $('promo'),
-    chkDisenador: $('chkDisenador'), chkVenta: $('chkVenta'), chkTarjeta: $('chkTarjeta')
+    chkDisenador: $('chkDisenador'), chkVenta: $('chkVenta'), chkTarjeta: $('chkTarjeta'),
+    inv: $('inv'), descProm: $('descProm')
   };
 
   var fmtMoney = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -584,6 +653,7 @@
       $('factorTotalOut').textContent = '—';
       $('factorTotalSub').textContent = '';
       renderPromo(null, landed, {}, promo, itbis);
+      renderInventario(null, 0, 0, 0, 0);
       saveState();
       return;
     }
@@ -608,7 +678,106 @@
     };
 
     renderPromo(lista, landed, cargasPromo, promo, itbis);
+    renderInventario(lista, landed, pTarjetaEf + pVenta + pDisenador, pOperativos, itbis);
     saveState();
+  }
+
+  function renderInventario(lista, landed, cargasVar, pOperativos, itbis) {
+    var inv = Math.max(0, num(inputs.inv, DEFAULTS.inv));
+    var descProm = num(inputs.descProm, 0) / 100;
+    $('descPromVal').textContent = pct(descProm * 100);
+
+    var barLabel = $('invBarLabel');
+    var cardGan = $('cardGananciaInv');
+
+    function blank(msg) {
+      $('beVarOut').textContent = '—';
+      $('beVarSub').textContent = msg || '';
+      $('beFixOut').textContent = '—';
+      $('beFixSub').textContent = '';
+      $('ganTotalOut').textContent = '—';
+      $('ganTotalSub').textContent = '';
+      cardGan.className = 'bigcard';
+      barLabel.textContent = '';
+      drawInvBar(NaN, NaN);
+    }
+
+    if (lista === null || !isFinite(lista) || lista <= 0 || landed <= 0 || inv <= 0) {
+      blank('');
+      return;
+    }
+
+    var cargasAll = cargasVar + pOperativos;
+    var cobradoU = lista * (1 - descProm);          // venta base sin ITBIS por unidad
+    var cashVar = 1 - cargasAll;                     // cash por $1 vendido, operativos como variables
+    var cashFix = 1 - cargasVar;                     // cash por $1 vendido, operativos fijos
+
+    if (cashVar <= 0 || cobradoU <= 0) {
+      blank('Con estas cargas no hay cash por venta');
+      return;
+    }
+
+    var totalRevNeto = inv * cobradoU / landed;      // facturación neta si se vende todo
+    var Rvar = inv / cashVar;                        // facturación neta para recuperar el cash
+    var Rfix = inv / cashFix;
+    var fracVar = Rvar / totalRevNeto;               // % del inventario (a costo) vendido en ese punto
+    var fracFix = Rfix / totalRevNeto;
+    var ganancia = totalRevNeto * cashVar - inv;
+
+    $('beVarOut').textContent = usd(Rvar);
+    $('beVarSub').textContent = 'Con ITBIS ' + usd(Rvar * (1 + itbis)) + ' · ' + pct(Math.min(fracVar, 9.99) * 100) + ' del inventario';
+    $('beFixOut').textContent = usd(Rfix);
+    $('beFixSub').textContent = 'Con ITBIS ' + usd(Rfix * (1 + itbis)) + ' · ' + pct(Math.min(fracFix, 9.99) * 100) + ' del inventario';
+
+    if (fracVar > 1) {
+      $('ganTotalOut').textContent = '−' + usd(Math.abs(ganancia));
+      $('ganTotalSub').textContent = 'Vendiendo todo NO se recupera el cash con ' + pct(descProm * 100) + ' de descuento promedio';
+      cardGan.className = 'bigcard bad';
+    } else {
+      $('ganTotalOut').textContent = usd(ganancia) + ' de ganancia';
+      $('ganTotalSub').textContent = 'Facturando ' + usd(totalRevNeto) + ' netos (' + usd(totalRevNeto * (1 + itbis)) + ' con ITBIS)';
+      cardGan.className = 'bigcard good';
+    }
+
+    barLabel.textContent = 'Fijos: ' + pct(Math.min(fracFix, 9.99) * 100) + ' · Variables: ' + pct(Math.min(fracVar, 9.99) * 100);
+    drawInvBar(fracFix, fracVar);
+  }
+
+  function drawInvBar(fracFix, fracVar) {
+    var zr = $('invZoneRed'), za = $('invZoneAmber'), zg = $('invZoneGreen');
+    var mf = $('invMarkFix'), ff = $('invFlagFix');
+    var mv = $('invMarkVar'), fv = $('invFlagVar');
+
+    if (!isFinite(fracFix) || !isFinite(fracVar)) {
+      zr.style.width = '100%';
+      za.style.left = '0%'; za.style.width = '0%';
+      zg.style.width = '0%';
+      mf.style.display = ff.style.display = mv.style.display = fv.style.display = 'none';
+      return;
+    }
+
+    var pf = Math.min(Math.max(fracFix, 0), 1) * 100;
+    var pv = Math.min(Math.max(fracVar, 0), 1) * 100;
+
+    zr.style.width = pf + '%';
+    za.style.left = pf + '%';
+    za.style.width = Math.max(pv - pf, 0) + '%';
+    zg.style.width = (100 - pv) + '%';
+
+    var showF = fracFix > 0 && fracFix < 1;
+    mf.style.display = ff.style.display = showF ? 'block' : 'none';
+    if (showF) {
+      mf.style.left = pf + '%';
+      ff.style.left = Math.min(Math.max(pf, 10), 90) + '%';
+      ff.textContent = 'Fijos ' + fmtPct.format(fracFix * 100) + '%';
+    }
+    var showV = fracVar > 0 && fracVar < 1;
+    mv.style.display = fv.style.display = showV ? 'block' : 'none';
+    if (showV) {
+      mv.style.left = pv + '%';
+      fv.style.left = Math.min(Math.max(pv, 10), 90) + '%';
+      fv.textContent = 'Variables ' + fmtPct.format(fracVar * 100) + '%';
+    }
   }
 
   function renderPromo(lista, landed, cargasPromo, promo, itbis) {
