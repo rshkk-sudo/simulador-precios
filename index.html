@@ -188,6 +188,7 @@
   .bigcard .sub { font-size: 12px; color: var(--text-soft); margin-top: 3px; font-variant-numeric: tabular-nums; }
   .bigcard.primary { background: var(--accent-soft); border-color: var(--accent); }
   .bigcard.primary .value { color: var(--accent); }
+  .bigcard.wide { grid-column: 1 / -1; }
   .bigcard.good { background: var(--green-bg); border-color: var(--green-border); }
   .bigcard.good .value { color: var(--green); }
   .bigcard.bad { background: var(--red-bg); border-color: var(--red-border); }
@@ -393,6 +394,11 @@
           <div class="value" id="listaOut">—</div>
           <div class="sub" id="listaSub"></div>
         </div>
+        <div class="bigcard primary wide">
+          <div class="label">Factor total FOB → precio de lista</div>
+          <div class="value" id="factorTotalOut">—</div>
+          <div class="sub" id="factorTotalSub"></div>
+        </div>
       </div>
 
       <button class="reset" id="resetBtn">Restaurar valores por defecto</button>
@@ -553,6 +559,8 @@
     if (imposible) {
       $('listaOut').textContent = '—';
       $('listaSub').textContent = 'Cargas + margen = ' + pct((cargas + margen) * 100);
+      $('factorTotalOut').textContent = '—';
+      $('factorTotalSub').textContent = '';
       renderPromo(null, landed, {}, promo);
       saveState();
       return;
@@ -560,9 +568,13 @@
 
     var neto = landed / (1 - cargas - margen);
     var lista = neto / (1 - descBase);
+    var factorTotal = factor / ((1 - cargas - margen) * (1 - descBase));
+    var factorNeto = factor / (1 - cargas - margen);
 
     $('listaOut').textContent = usd(lista);
     $('listaSub').textContent = 'Neto ' + usd(neto) + ' · desc. base ' + pct(descBase * 100);
+    $('factorTotalOut').textContent = '×' + factorTotal.toFixed(2);
+    $('factorTotalSub').textContent = 'FOB × ' + factorTotal.toFixed(2) + ' = precio de lista · a precio neto: ×' + factorNeto.toFixed(2);
 
     // --- Sección 2: promo ---
     var cargasPromo = {
