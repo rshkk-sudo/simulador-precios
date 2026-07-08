@@ -200,6 +200,55 @@
     background: #d97706;
     opacity: .78;
   }
+
+  /* Sección 4: importar contenedor */
+  .imp-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 980px) { .imp-grid { grid-template-columns: 1fr; } }
+  .note { font-size: 12.5px; color: var(--text-soft); margin: -8px 0 16px; }
+  input[type="file"] {
+    width: 100%;
+    font-size: 12.5px;
+    color: var(--text-soft);
+    padding: 8px;
+    border: 1px dashed var(--border);
+    border-radius: 9px;
+    background: var(--bg);
+  }
+  .filestatus { font-size: 12px; margin: 6px 0 14px; min-height: 15px; }
+  .filestatus.ok { color: var(--green); }
+  .filestatus.err { color: var(--red); }
+  .mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+  .mini-grid .field { margin-bottom: 4px; }
+  .mini-grid label { font-size: 11.5px !important; font-weight: 600; color: var(--text-soft); }
+  .mini-grid input[type="number"] { padding: 7px 9px; font-size: 13.5px; }
+  .gastos-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .gastos-row input[type="text"] {
+    flex: 1; min-width: 0;
+    padding: 7px 9px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text);
+  }
+  .gastos-row input[type="number"] { width: 110px; padding: 7px 9px; font-size: 13px; }
+  .gastos-row button {
+    background: none; border: none; color: var(--red);
+    font-size: 16px; cursor: pointer; padding: 2px 6px; line-height: 1;
+  }
+  .addrow {
+    background: none; border: 1px dashed var(--border); color: var(--text-soft);
+    width: 100%; padding: 7px; border-radius: 8px; font-size: 12.5px; cursor: pointer;
+    font-family: inherit; margin-top: 2px;
+  }
+  .addrow:hover { color: var(--text); border-color: var(--text-soft); }
+  #impResultados table { margin-top: 0; }
+  .applybtn {
+    width: 100%; margin-top: 14px;
+    background: var(--accent); border: none; color: #fff;
+    padding: 12px; border-radius: 10px; font-size: 14.5px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+  }
+  .applybtn:disabled { opacity: .4; cursor: default; }
+  .factorline { font-size: 14px; margin: 10px 0 2px; }
+  .factorline strong { font-size: 19px; color: var(--accent); }
   .bigcard.good { background: var(--green-bg); border-color: var(--green-border); }
   .bigcard.good .value { color: var(--green); }
   .bigcard.bad { background: var(--red-bg); border-color: var(--red-border); }
@@ -533,6 +582,51 @@
         </div>
         <div class="betitle" style="margin-top:10px">
           <span>Rojo: aún no recuperas · Ámbar: recuperado solo si los operativos son fijos · Verde: recuperado en ambos escenarios</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SECCIÓN 4 ============ -->
+    <section class="panel full">
+      <h2><span class="num">4</span> Importar contenedor (proforma + liquidación SIGA)</h2>
+      <p class="note">Los archivos se procesan en tu navegador — no se suben a ningún servidor. Se necesita internet la primera vez para cargar los lectores de Excel y PDF. Los valores extraídos se pueden corregir a mano.</p>
+
+      <div class="imp-grid">
+        <div>
+          <div class="subhead" style="margin-top:0; padding-top:0; border-top:none">Documentos</div>
+          <div class="field">
+            <label for="fileProforma">Proforma del suplidor (.xlsx)</label>
+            <input type="file" id="fileProforma" accept=".xlsx,.xls">
+          </div>
+          <div class="filestatus" id="stProforma"></div>
+          <div class="field">
+            <label for="fileSiga">Liquidación SIGA (.pdf)</label>
+            <input type="file" id="fileSiga" accept=".pdf">
+          </div>
+          <div class="filestatus" id="stSiga"></div>
+
+          <div class="subhead">Valores extraídos (editables)</div>
+          <div class="mini-grid">
+            <div class="field"><label for="impSup">Total pagado al suplidor US$</label><input type="number" id="impSup" step="0.01"></div>
+            <div class="field"><label for="impMerc">Mercancía sin comisión US$</label><input type="number" id="impMerc" step="0.01"></div>
+            <div class="field"><label for="impAlf">De eso, alfombras US$</label><input type="number" id="impAlf" step="0.01"></div>
+            <div class="field"><label for="impTC">Tasa de cambio RD$/US$</label><input type="number" id="impTC" step="0.01"></div>
+            <div class="field"><label for="impGravRD">Gravamen RD$</label><input type="number" id="impGravRD" step="0.01"></div>
+            <div class="field"><label for="impSelRD">Selectivo RD$</label><input type="number" id="impSelRD" step="0.01"></div>
+            <div class="field"><label for="impItbisRD">ITBIS aduanal RD$</label><input type="number" id="impItbisRD" step="0.01"></div>
+            <div class="field"><label for="impTasasRD">Tasa servicio + DUA RD$</label><input type="number" id="impTasasRD" step="0.01"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="subhead" style="margin-top:0; padding-top:0; border-top:none">Gastos locales (US$)</div>
+          <div id="gastosRows"></div>
+          <button class="addrow" id="addGasto">+ Agregar gasto</button>
+        </div>
+
+        <div>
+          <div class="subhead" style="margin-top:0; padding-top:0; border-top:none">Resultado</div>
+          <div id="impResultados"><p class="note" style="margin:0">Sube los documentos o llena los valores a mano.</p></div>
         </div>
       </div>
     </section>
@@ -883,6 +977,255 @@
 
   loadState();
   recalc();
+
+  /* ================= Sección 4: importar contenedor ================= */
+
+  var LS_IMP = 'simuladorPreciosImport';
+  var IMP_FIELDS = ['impSup', 'impMerc', 'impAlf', 'impTC', 'impGravRD', 'impSelRD', 'impItbisRD', 'impTasasRD'];
+  var GASTOS_DEFAULT = [
+    { d: 'EPIC CARGO — flete, envío y docs', v: 3900.00 },
+    { d: 'CAUCEDO — almacenaje y fumigación', v: 532.55 },
+    { d: 'DPH — gastos portuarios', v: 354.00 },
+    { d: 'DUXLODOM — gestión aduanal', v: 631.63 },
+    { d: 'TML — comida inventario', v: 66.73 }
+  ];
+  var gastos = [];
+
+  function loadImp() {
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem(LS_IMP)) || {}; } catch (e) { saved = {}; }
+    IMP_FIELDS.forEach(function (k) {
+      if (saved[k] != null && isFinite(saved[k])) $(k).value = saved[k];
+    });
+    if (!$('impTC').value) $('impTC').value = 59.94;
+    gastos = Array.isArray(saved.gastos) ? saved.gastos : GASTOS_DEFAULT.map(function (g) { return { d: g.d, v: g.v }; });
+  }
+
+  function saveImp() {
+    var state = { gastos: gastos };
+    IMP_FIELDS.forEach(function (k) {
+      var v = parseFloat($(k).value);
+      if (isFinite(v)) state[k] = v;
+    });
+    try { localStorage.setItem(LS_IMP, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function renderGastos() {
+    var cont = $('gastosRows');
+    cont.innerHTML = '';
+    gastos.forEach(function (g, i) {
+      var row = document.createElement('div');
+      row.className = 'gastos-row';
+      var txt = document.createElement('input');
+      txt.type = 'text'; txt.value = g.d; txt.placeholder = 'Descripción';
+      txt.addEventListener('input', function () { g.d = txt.value; saveImp(); });
+      var amt = document.createElement('input');
+      amt.type = 'number'; amt.step = '0.01'; amt.value = g.v;
+      amt.addEventListener('input', function () { g.v = parseFloat(amt.value) || 0; recalcImport(); });
+      var del = document.createElement('button');
+      del.textContent = '×'; del.title = 'Eliminar';
+      del.addEventListener('click', function () { gastos.splice(i, 1); renderGastos(); recalcImport(); });
+      row.appendChild(txt); row.appendChild(amt); row.appendChild(del);
+      cont.appendChild(row);
+    });
+  }
+
+  $('addGasto').addEventListener('click', function () {
+    gastos.push({ d: '', v: 0 });
+    renderGastos();
+    var rows = $('gastosRows').querySelectorAll('.gastos-row input[type="text"]');
+    if (rows.length) rows[rows.length - 1].focus();
+  });
+
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = function () { reject(new Error('No se pudo cargar ' + src + ' — ¿hay internet?')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  var libXlsx = null, libPdf = null;
+  function ensureXlsx() {
+    if (!libXlsx) libXlsx = loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+    return libXlsx;
+  }
+  function ensurePdf() {
+    if (!libPdf) libPdf = loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js').then(function () {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    });
+    return libPdf;
+  }
+
+  function setStatus(id, msg, cls) {
+    var el = $(id);
+    el.textContent = msg;
+    el.className = 'filestatus' + (cls ? ' ' + cls : '');
+  }
+
+  function parseNum(s) { return parseFloat(String(s).replace(/,/g, '')); }
+
+  // --- Proforma (.xlsx): total pagado, mercancía, alfombras ---
+  $('fileProforma').addEventListener('change', function () {
+    var f = this.files[0];
+    if (!f) return;
+    setStatus('stProforma', 'Leyendo…');
+    ensureXlsx().then(function () {
+      return f.arrayBuffer();
+    }).then(function (buf) {
+      var wb = XLSX.read(buf, { type: 'array' });
+      var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true });
+
+      var merc = 0, alf = 0, comision = 0, gastoLocal = 0, total = NaN;
+      // columna de T.VALOR: buscar en la fila de encabezado
+      var colVal = 9, colDes = 2;
+      rows.forEach(function (r) {
+        if (!r) return;
+        r.forEach(function (c, i) {
+          if (typeof c === 'string') {
+            if (/T\.?\s*VALOR/i.test(c)) colVal = i;
+            if (/^DES/i.test(c.trim())) colDes = i;
+          }
+        });
+      });
+      function firstNum(r) {
+        for (var i = 0; i < r.length; i++) if (typeof r[i] === 'number') return r[i];
+        return NaN;
+      }
+      rows.forEach(function (r) {
+        if (!r) return;
+        var joined = r.filter(function (c) { return typeof c === 'string'; }).join(' ');
+        if (/comisi/i.test(joined) && !comision) { comision = firstNum(r) || 0; return; }
+        if (/gasto\s*local/i.test(joined) && !gastoLocal) { gastoLocal = firstNum(r) || 0; return; }
+        if (/^\s*total\s*$/i.test(joined) && !isFinite(total)) { total = firstNum(r); return; }
+        if (r[0] != null && r[0] !== '' && typeof r[colVal] === 'number') {
+          merc += r[colVal];
+          if (typeof r[colDes] === 'string' && /alfombra/i.test(r[colDes])) alf += r[colVal];
+        }
+      });
+      if (!isFinite(total)) total = merc + comision + gastoLocal;
+      if (merc <= 0) throw new Error('No encontré renglones de mercancía. Revisa el formato.');
+
+      $('impSup').value = total.toFixed(2);
+      $('impMerc').value = merc.toFixed(2);
+      $('impAlf').value = alf.toFixed(2);
+      setStatus('stProforma', 'OK — mercancía ' + usd(merc) + ', total con comisión y gastos ' + usd(total), 'ok');
+      recalcImport();
+    }).catch(function (e) {
+      setStatus('stProforma', 'Error: ' + e.message, 'err');
+    });
+  });
+
+  // --- Liquidación SIGA (.pdf): totales de impuestos y tasa de cambio ---
+  $('fileSiga').addEventListener('change', function () {
+    var f = this.files[0];
+    if (!f) return;
+    setStatus('stSiga', 'Leyendo…');
+    ensurePdf().then(function () {
+      return f.arrayBuffer();
+    }).then(function (buf) {
+      return window.pdfjsLib.getDocument({ data: buf }).promise;
+    }).then(function (pdf) {
+      var chain = Promise.resolve('');
+      for (var p = 1; p <= pdf.numPages; p++) {
+        (function (pn) {
+          chain = chain.then(function (acc) {
+            return pdf.getPage(pn).then(function (page) {
+              return page.getTextContent();
+            }).then(function (tc) {
+              return acc + ' ' + tc.items.map(function (it) { return it.str; }).join(' ');
+            });
+          });
+        })(p);
+      }
+      return chain;
+    }).then(function (text) {
+      var NUM = '([\\d,]+\\.\\d{2})';
+      var mTot = text.match(new RegExp('Totales\\s*' + NUM + '\\s*' + NUM + '\\s*' + NUM + '\\s*' + NUM + '\\s*' + NUM));
+      if (!mTot) throw new Error('No encontré la fila de Totales. ¿Es el Reporte de Liquidación de SIGA?');
+      var grav = parseNum(mTot[2]), sel = parseNum(mTot[3]), itbisRD = parseNum(mTot[4]);
+
+      var mTC = text.match(/US\$\s*\(\s*([\d.]+)\s*\)/);
+      var mTasa = text.match(new RegExp('Tasa\\s*Servicio\\s*Aduanero\\s*:?\\s*\\$?\\s*' + NUM, 'i'));
+      var mDua = text.match(new RegExp('Declaraci.{0,2}n\\s*Unica\\s*Aduanera\\s*:?\\s*\\$?\\s*' + NUM, 'i'));
+      var tasas = (mTasa ? parseNum(mTasa[1]) : 0) + (mDua ? parseNum(mDua[1]) : 0);
+
+      $('impGravRD').value = grav.toFixed(2);
+      $('impSelRD').value = sel.toFixed(2);
+      $('impItbisRD').value = itbisRD.toFixed(2);
+      $('impTasasRD').value = tasas.toFixed(2);
+      if (mTC) $('impTC').value = parseFloat(mTC[1]);
+      setStatus('stSiga', 'OK — gravamen RD$' + fmtMoney.format(grav) + ', selectivo RD$' + fmtMoney.format(sel) + ', ITBIS RD$' + fmtMoney.format(itbisRD) + (mTC ? ', tasa ' + mTC[1] : ''), 'ok');
+      recalcImport();
+    }).catch(function (e) {
+      setStatus('stSiga', 'Error: ' + e.message, 'err');
+    });
+  });
+
+  function impVal(id) {
+    var v = parseFloat($(id).value);
+    return isFinite(v) ? v : 0;
+  }
+
+  function recalcImport() {
+    saveImp();
+    var out = $('impResultados');
+    var sup = impVal('impSup');
+    var merc = impVal('impMerc') || sup;
+    var alfV = impVal('impAlf');
+    var tc = impVal('impTC');
+
+    if (sup <= 0 || tc <= 0) {
+      out.innerHTML = '<p class="note" style="margin:0">Sube los documentos o llena los valores a mano.</p>';
+      return;
+    }
+
+    var gravUSD = impVal('impGravRD') / tc;
+    var selUSD = impVal('impSelRD') / tc;
+    var tasasUSD = impVal('impTasasRD') / tc;
+    var itbisUSD = impVal('impItbisRD') / tc;
+    var gastosUSD = gastos.reduce(function (s, g) { return s + (parseFloat(g.v) || 0); }, 0);
+
+    var landed = sup + gastosUSD + gravUSD + selUSD + tasasUSD;
+    var factor = landed / sup;
+    var factorComun = (landed - selUSD) / sup;      // sin selectivo: aplica a todo
+    var alfSup = merc > 0 ? alfV * (sup / merc) : 0; // costo alfombras con su parte de comisión
+    var factorAlf = alfSup > 0 ? factorComun + selUSD / alfSup : null;
+
+    var html = '<table><tbody>';
+    html += '<tr><td>Suplidor (mercancía + comisión + gastos China)</td><td class="amt">' + usd(sup) + '</td></tr>';
+    html += '<tr><td>Gastos locales RD</td><td class="amt">' + usd(gastosUSD) + '</td></tr>';
+    html += '<tr><td>Gravamen</td><td class="amt">' + usd(gravUSD) + '</td></tr>';
+    html += '<tr><td>Selectivo (solo alfombras)</td><td class="amt">' + usd(selUSD) + '</td></tr>';
+    html += '<tr><td>Tasa servicio + DUA</td><td class="amt">' + usd(tasasUSD) + '</td></tr>';
+    html += '<tr class="skip"><td>ITBIS aduanal (crédito fiscal, no costo)</td><td class="amt">' + usd(itbisUSD) + '</td></tr>';
+    html += '<tr class="total"><td>Landed real (sin ITBIS)</td><td class="amt">' + usd(landed) + '</td></tr>';
+    html += '</tbody></table>';
+    html += '<div class="factorline">Factor del contenedor: <strong>×' + factor.toFixed(2) + '</strong></div>';
+    if (factorAlf && selUSD > 0) {
+      html += '<div class="factorline" style="font-size:12.5px; color:var(--text-soft)">Alfombras: ×' + factorAlf.toFixed(2) + ' · Resto: ×' + factorComun.toFixed(2) + '</div>';
+    }
+    html += '<button class="applybtn" id="btnAplicar">Aplicar al simulador (factor ×' + factor.toFixed(2) + ' + inventario ' + usd(landed) + ')</button>';
+    out.innerHTML = html;
+
+    $('btnAplicar').addEventListener('click', function () {
+      inputs.factor.value = Math.min(Math.max(factor, 1.20), 2.20).toFixed(2);
+      inputs.facIncItbis.checked = false;   // este factor ya viene limpio de ITBIS
+      inputs.inv.value = Math.round(landed);
+      recalc();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+
+  IMP_FIELDS.forEach(function (k) {
+    $(k).addEventListener('input', recalcImport);
+  });
+
+  loadImp();
+  renderGastos();
+  recalcImport();
 })();
 </script>
 </body>
