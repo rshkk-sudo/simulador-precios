@@ -616,6 +616,7 @@
             <div class="field"><label for="impItbisRD">ITBIS aduanal RD$</label><input type="number" id="impItbisRD" step="0.01"></div>
             <div class="field"><label for="impTasasRD">Tasa servicio + DUA RD$</label><input type="number" id="impTasasRD" step="0.01"></div>
           </div>
+          <button class="reset" id="resetImp">Limpiar sección — nuevo contenedor</button>
         </div>
 
         <div>
@@ -1279,6 +1280,20 @@
 
   IMP_FIELDS.forEach(function (k) {
     $(k).addEventListener('input', recalcImport);
+  });
+
+  $('resetImp').addEventListener('click', function () {
+    try { localStorage.removeItem(LS_IMP); } catch (e) {}
+    IMP_FIELDS.forEach(function (k) { $(k).value = ''; });
+    $('impTC').value = 59.94;
+    gastos = GASTOS_DEFAULT.map(function (g) { return { d: g.d, v: g.v }; });
+    selItems = [];
+    $('fileProforma').value = '';
+    $('fileSiga').value = '';
+    setStatus('stProforma', '');
+    setStatus('stSiga', '');
+    renderGastos();
+    recalcImport();
   });
 
   loadImp();
