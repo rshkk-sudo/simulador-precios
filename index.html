@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador de Precios — Muebles y Decoración</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card-bg: #ffffff;
+    --text: #1a1d21;
+    --text-soft: #5c6470;
+    --border: #e2e5ea;
+    --accent: #2563eb;
+    --accent-soft: #eff4ff;
+    --green: #16a34a;
+    --green-bg: #ecfdf3;
+    --green-border: #b7ebc8;
+    --red: #dc2626;
+    --red-bg: #fef2f2;
+    --red-border: #f5c2c2;
+    --amber-bg: #fffbeb;
+    --amber-border: #fde68a;
+    --amber-text: #92400e;
+    --track: #d8dce3;
+    --shadow: 0 1px 3px rgba(0,0,0,.07), 0 4px 14px rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --card-bg: #1a1e26;
+      --text: #e8eaee;
+      --text-soft: #98a0ac;
+      --border: #2b313c;
+      --accent: #5b8cff;
+      --accent-soft: #1c2740;
+      --green: #34d276;
+      --green-bg: #12281b;
+      --green-border: #1f4a30;
+      --red: #f06a6a;
+      --red-bg: #2e1717;
+      --red-border: #5a2626;
+      --amber-bg: #2b2210;
+      --amber-border: #5c4a1a;
+      --amber-text: #f2c94c;
+      --track: #333a47;
+      --shadow: 0 1px 3px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 24px 16px 48px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.45;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  header { margin-bottom: 22px; }
+  header h1 { margin: 0 0 4px; font-size: 24px; font-weight: 700; }
+  header p { margin: 0; color: var(--text-soft); font-size: 14px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+    box-shadow: var(--shadow);
+  }
+  .panel h2 {
+    margin: 0 0 18px;
+    font-size: 17px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel h2 .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px; height: 24px;
+    border-radius: 7px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 13px;
+    flex: 0 0 auto;
+  }
+
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13.5px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    gap: 8px;
+  }
+  .field label .val {
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  input[type="number"] {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 16px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--bg);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="number"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--track);
+    cursor: pointer;
+    margin: 4px 0 0;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--card-bg);
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--card-bg);
+    box-shadow: 0 1px 4px rgba(0,0,0,.3);
+  }
+  #promo { height: 10px; border-radius: 5px; }
+  #promo::-webkit-slider-thumb { width: 26px; height: 26px; }
+  #promo::-moz-range-thumb { width: 18px; height: 18px; }
+
+  .subhead {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-soft);
+    margin: 22px 0 12px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .subhead:first-of-type { margin-top: 18px; }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+  @media (max-width: 420px) { .cards { grid-template-columns: 1fr; } }
+
+  .bigcard {
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .bigcard .label { font-size: 12px; font-weight: 600; color: var(--text-soft); text-transform: uppercase; letter-spacing: .05em; }
+  .bigcard .value { font-size: 27px; font-weight: 800; margin-top: 4px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .bigcard .sub { font-size: 12px; color: var(--text-soft); margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .bigcard.primary { background: var(--accent-soft); border-color: var(--accent); }
+  .bigcard.primary .value { color: var(--accent); }
+  .bigcard.good { background: var(--green-bg); border-color: var(--green-border); }
+  .bigcard.good .value { color: var(--green); }
+  .bigcard.bad { background: var(--red-bg); border-color: var(--red-border); }
+  .bigcard.bad .value { color: var(--red); }
+
+  .alert {
+    display: none;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+    background: var(--red-bg);
+    border: 1px solid var(--red-border);
+    color: var(--red);
+  }
+  .alert.show { display: block; }
+
+  .checks { display: flex; flex-direction: column; gap: 9px; margin-bottom: 4px; }
+  .checks label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .checks input[type="checkbox"] {
+    width: 18px; height: 18px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex: 0 0 auto;
+  }
+  .checks .pct { color: var(--text-soft); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .checks .fixed { color: var(--text-soft); font-size: 12.5px; font-style: italic; }
+
+  /* Barra visual break-even */
+  .bewrap { margin-top: 20px; }
+  .bewrap .betitle {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-soft);
+    margin-bottom: 8px;
+  }
+  .bar {
+    position: relative;
+    height: 26px;
+    border-radius: 13px;
+    background: var(--track);
+    overflow: visible;
+  }
+  .bar .zone-green, .bar .zone-red {
+    position: absolute;
+    top: 0; bottom: 0;
+  }
+  .bar .zone-green { left: 0; background: var(--green); opacity: .78; border-radius: 13px 0 0 13px; }
+  .bar .zone-red { right: 0; background: var(--red); opacity: .78; border-radius: 0 13px 13px 0; }
+  .bar .be-marker {
+    position: absolute;
+    top: -6px; bottom: -6px;
+    width: 3px;
+    background: var(--text);
+    border-radius: 2px;
+    transform: translateX(-50%);
+  }
+  .bar .be-flag {
+    position: absolute;
+    top: -26px;
+    transform: translateX(-50%);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .bar .dot {
+    position: absolute;
+    top: 50%;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    border: 3px solid var(--text);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 1px 4px rgba(0,0,0,.35);
+  }
+  .bar-scale {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-soft);
+    margin-top: 5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 18px;
+    font-size: 13.5px;
+  }
+  table caption {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--text-soft);
+    margin-bottom: 8px;
+  }
+  th, td { padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  th { text-align: left; font-weight: 600; color: var(--text-soft); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  td.amt { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+  td.neg { color: var(--red); }
+  tr.skip td { color: var(--text-soft); font-style: italic; font-weight: 400; }
+  tr.total td { font-weight: 800; font-size: 15px; border-bottom: none; padding-top: 12px; }
+  tr.total td.amt.pos { color: var(--green); }
+  tr.total td.amt.negt { color: var(--red); }
+
+  .reset {
+    margin-top: 20px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-soft);
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .reset:hover { color: var(--text); border-color: var(--text-soft); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Simulador de Precios</h1>
+    <p>Muebles y decoración — importación desde China. Construcción del precio de lista y simulación de promociones.</p>
+  </header>
+
+  <div class="grid">
+
+    <!-- ============ SECCIÓN 1 ============ -->
+    <section class="panel">
+      <h2><span class="num">1</span> Construcción del precio de lista</h2>
+
+      <div class="field">
+        <label for="fob">Costo FOB China (US$)</label>
+        <input type="number" id="fob" min="0" step="50" value="1000">
+      </div>
+
+      <div class="field">
+        <label for="factor">Factor FOB → landed <span class="val" id="factorVal"></span></label>
+        <input type="range" id="factor" min="1.20" max="2.20" step="0.01" value="1.60">
+      </div>
+
+      <div class="subhead">Cargas (% sobre el precio de venta neto)</div>
+
+      <div class="field">
+        <label for="tarjeta">Tarjeta de crédito <span class="val" id="tarjetaVal"></span></label>
+        <input type="range" id="tarjeta" min="0" max="8" step="0.1" value="4.5">
+      </div>
+      <div class="field">
+        <label for="venta">Comisión de venta <span class="val" id="ventaVal"></span></label>
+        <input type="range" id="venta" min="0" max="15" step="0.5" value="5">
+      </div>
+      <div class="field">
+        <label for="disenador">Comisión de diseñador <span class="val" id="disenadorVal"></span></label>
+        <input type="range" id="disenador" min="0" max="20" step="0.5" value="10">
+      </div>
+      <div class="field">
+        <label for="operativos">Costos operativos <span class="val" id="operativosVal"></span></label>
+        <input type="range" id="operativos" min="0" max="25" step="0.5" value="12">
+      </div>
+
+      <div class="subhead">Descuento y margen</div>
+
+      <div class="field">
+        <label for="descBase">Descuento de diseño base <span class="val" id="descBaseVal"></span></label>
+        <input type="range" id="descBase" min="0" max="25" step="0.5" value="10">
+      </div>
+      <div class="field">
+        <label for="margen">Margen deseado sobre venta <span class="val" id="margenVal"></span></label>
+        <input type="range" id="margen" min="0" max="50" step="0.5" value="20">
+      </div>
+
+      <div class="alert" id="alertaImposible">
+        No hay precio posible: las cargas más el margen alcanzan o superan el 98% del precio de venta. Baja alguna carga o el margen.
+      </div>
+
+      <div class="cards">
+        <div class="bigcard">
+          <div class="label">Costo landed</div>
+          <div class="value" id="landedOut">—</div>
+          <div class="sub" id="landedSub"></div>
+        </div>
+        <div class="bigcard primary">
+          <div class="label">Precio de lista</div>
+          <div class="value" id="listaOut">—</div>
+          <div class="sub" id="listaSub"></div>
+        </div>
+      </div>
+
+      <button class="reset" id="resetBtn">Restaurar valores por defecto</button>
+    </section>
+
+    <!-- ============ SECCIÓN 2 ============ -->
+    <section class="panel">
+      <h2><span class="num">2</span> Simulador de promo / liquidación</h2>
+
+      <div class="field">
+        <label for="promo">Descuento promo <span class="val" id="promoVal"></span></label>
+        <input type="range" id="promo" min="0" max="60" step="1" value="40">
+      </div>
+
+      <div class="subhead">Cargas que sí se pagan en la promo</div>
+      <div class="checks">
+        <label><input type="checkbox" id="chkDisenador"> Comisión de diseñador <span class="pct" id="chkDisenadorPct"></span></label>
+        <label><input type="checkbox" id="chkVenta" checked> Comisión de venta <span class="pct" id="chkVentaPct"></span></label>
+        <label><input type="checkbox" id="chkTarjeta" checked> Tarjeta de crédito <span class="pct" id="chkTarjetaPct"></span></label>
+        <label><input type="checkbox" checked disabled> Costos operativos <span class="fixed">siempre se pagan</span> <span class="pct" id="chkOperativosPct"></span></label>
+      </div>
+
+      <div class="cards">
+        <div class="bigcard" id="cardResultado">
+          <div class="label">Resultado por unidad</div>
+          <div class="value" id="resultadoOut">—</div>
+          <div class="sub" id="margenResOut"></div>
+        </div>
+        <div class="bigcard">
+          <div class="label">Precio con promo</div>
+          <div class="value" id="cobradoOut">—</div>
+          <div class="sub" id="breakEvenOut"></div>
+        </div>
+      </div>
+
+      <div class="bewrap">
+        <div class="betitle">
+          <span>Zona de descuento (0–60%)</span>
+          <span id="beLabel"></span>
+        </div>
+        <div class="bar" id="beBar">
+          <div class="zone-green" id="zoneGreen"></div>
+          <div class="zone-red" id="zoneRed"></div>
+          <div class="be-marker" id="beMarker"></div>
+          <div class="be-flag" id="beFlag"></div>
+          <div class="dot" id="promoDot"></div>
+        </div>
+        <div class="bar-scale">
+          <span>0%</span><span>10%</span><span>20%</span><span>30%</span><span>40%</span><span>50%</span><span>60%</span>
+        </div>
+      </div>
+
+      <table>
+        <caption>Desglose por unidad</caption>
+        <thead>
+          <tr><th>Concepto</th><th style="text-align:right">US$</th></tr>
+        </thead>
+        <tbody id="desgloseBody"></tbody>
+      </table>
+    </section>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var LS_KEY = 'simuladorPreciosMuebles';
+
+  var DEFAULTS = {
+    fob: 1000, factor: 1.60,
+    tarjeta: 4.5, venta: 5, disenador: 10, operativos: 12,
+    descBase: 10, margen: 20,
+    promo: 40,
+    chkDisenador: false, chkVenta: true, chkTarjeta: true
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  var inputs = {
+    fob: $('fob'), factor: $('factor'),
+    tarjeta: $('tarjeta'), venta: $('venta'),
+    disenador: $('disenador'), operativos: $('operativos'),
+    descBase: $('descBase'), margen: $('margen'),
+    promo: $('promo'),
+    chkDisenador: $('chkDisenador'), chkVenta: $('chkVenta'), chkTarjeta: $('chkTarjeta')
+  };
+
+  var fmtMoney = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var fmtPct = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  function usd(n) { return 'US$ ' + fmtMoney.format(n); }
+  function pct(n) { return fmtPct.format(n) + '%'; }
+
+  function loadState() {
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch (e) { saved = {}; }
+    Object.keys(DEFAULTS).forEach(function (k) {
+      var v = (k in saved) ? saved[k] : DEFAULTS[k];
+      if (typeof DEFAULTS[k] === 'boolean') {
+        inputs[k].checked = !!v;
+      } else {
+        var num = parseFloat(v);
+        inputs[k].value = isFinite(num) ? num : DEFAULTS[k];
+      }
+    });
+  }
+
+  function saveState() {
+    var state = {};
+    Object.keys(DEFAULTS).forEach(function (k) {
+      state[k] = (typeof DEFAULTS[k] === 'boolean') ? inputs[k].checked : parseFloat(inputs[k].value);
+    });
+    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function num(el, fallback) {
+    var v = parseFloat(el.value);
+    return isFinite(v) ? v : fallback;
+  }
+
+  function recalc() {
+    // --- Lectura de inputs ---
+    var fob = Math.max(0, num(inputs.fob, DEFAULTS.fob));
+    var factor = num(inputs.factor, DEFAULTS.factor);
+    var pTarjeta = num(inputs.tarjeta, 0) / 100;
+    var pVenta = num(inputs.venta, 0) / 100;
+    var pDisenador = num(inputs.disenador, 0) / 100;
+    var pOperativos = num(inputs.operativos, 0) / 100;
+    var descBase = num(inputs.descBase, 0) / 100;
+    var margen = num(inputs.margen, 0) / 100;
+    var promo = num(inputs.promo, 0) / 100;
+
+    // --- Etiquetas de sliders ---
+    $('factorVal').textContent = '×' + factor.toFixed(2);
+    $('tarjetaVal').textContent = pct(pTarjeta * 100);
+    $('ventaVal').textContent = pct(pVenta * 100);
+    $('disenadorVal').textContent = pct(pDisenador * 100);
+    $('operativosVal').textContent = pct(pOperativos * 100);
+    $('descBaseVal').textContent = pct(descBase * 100);
+    $('margenVal').textContent = pct(margen * 100);
+    $('promoVal').textContent = pct(promo * 100);
+    $('chkDisenadorPct').textContent = '(' + pct(pDisenador * 100) + ')';
+    $('chkVentaPct').textContent = '(' + pct(pVenta * 100) + ')';
+    $('chkTarjetaPct').textContent = '(' + pct(pTarjeta * 100) + ')';
+    $('chkOperativosPct').textContent = '(' + pct(pOperativos * 100) + ')';
+
+    // --- Sección 1: precio de lista ---
+    var landed = fob * factor;
+    var cargas = pTarjeta + pVenta + pDisenador + pOperativos;
+    var imposible = (cargas + margen) >= 0.98;
+
+    $('alertaImposible').classList.toggle('show', imposible);
+    $('landedOut').textContent = usd(landed);
+    $('landedSub').textContent = usd(fob) + ' × ' + factor.toFixed(2);
+
+    if (imposible) {
+      $('listaOut').textContent = '—';
+      $('listaSub').textContent = 'Cargas + margen = ' + pct((cargas + margen) * 100);
+      renderPromo(null, landed, {}, promo);
+      saveState();
+      return;
+    }
+
+    var neto = landed / (1 - cargas - margen);
+    var lista = neto / (1 - descBase);
+
+    $('listaOut').textContent = usd(lista);
+    $('listaSub').textContent = 'Neto ' + usd(neto) + ' · desc. base ' + pct(descBase * 100);
+
+    // --- Sección 2: promo ---
+    var cargasPromo = {
+      tarjeta: { nombre: 'Tarjeta de crédito', p: pTarjeta, aplica: inputs.chkTarjeta.checked },
+      venta: { nombre: 'Comisión de venta', p: pVenta, aplica: inputs.chkVenta.checked },
+      disenador: { nombre: 'Comisión de diseñador', p: pDisenador, aplica: inputs.chkDisenador.checked },
+      operativos: { nombre: 'Costos operativos', p: pOperativos, aplica: true }
+    };
+
+    renderPromo(lista, landed, cargasPromo, promo);
+    saveState();
+  }
+
+  function renderPromo(lista, landed, cargasPromo, promo) {
+    var cardRes = $('cardResultado');
+    var body = $('desgloseBody');
+
+    if (lista === null || !isFinite(lista) || lista <= 0) {
+      $('resultadoOut').textContent = '—';
+      $('margenResOut').textContent = '';
+      $('cobradoOut').textContent = '—';
+      $('breakEvenOut').textContent = '';
+      $('beLabel').textContent = '';
+      cardRes.className = 'bigcard';
+      body.innerHTML = '';
+      drawBar(NaN, promo);
+      return;
+    }
+
+    var cargasEf = 0;
+    Object.keys(cargasPromo).forEach(function (k) {
+      if (cargasPromo[k].aplica) cargasEf += cargasPromo[k].p;
+    });
+
+    var cobrado = lista * (1 - promo);
+    var resultado = cobrado * (1 - cargasEf) - landed;
+    var margenRes = cobrado > 0 ? (resultado / cobrado) * 100 : 0;
+    var breakEven = 1 - landed / ((1 - cargasEf) * lista);
+
+    $('cobradoOut').textContent = usd(cobrado);
+    $('breakEvenOut').textContent = 'Break even: ' + (breakEven >= 0 ? pct(breakEven * 100) : 'imposible') + ' de descuento';
+    $('resultadoOut').textContent = (resultado < 0 ? '−' : '') + usd(Math.abs(resultado));
+    $('margenResOut').textContent = 'Margen resultante: ' + pct(margenRes);
+    cardRes.className = 'bigcard ' + (resultado >= 0 ? 'good' : 'bad');
+    $('beLabel').textContent = 'Break even: ' + (breakEven >= 0 ? pct(breakEven * 100) : 'n/a');
+
+    drawBar(breakEven, promo);
+
+    // --- Tabla de desglose ---
+    var rows = [];
+    rows.push('<tr><td>Precio cobrado (lista − ' + pct(promo * 100) + ')</td><td class="amt">' + usd(cobrado) + '</td></tr>');
+    ['tarjeta', 'venta', 'disenador', 'operativos'].forEach(function (k) {
+      var c = cargasPromo[k];
+      if (c.aplica) {
+        rows.push('<tr><td>− ' + c.nombre + ' (' + pct(c.p * 100) + ')</td><td class="amt neg">− ' + usd(cobrado * c.p) + '</td></tr>');
+      } else {
+        rows.push('<tr class="skip"><td>− ' + c.nombre + ' (no aplica)</td><td class="amt">US$ 0.00</td></tr>');
+      }
+    });
+    rows.push('<tr><td>− Costo landed</td><td class="amt neg">− ' + usd(landed) + '</td></tr>');
+    rows.push('<tr class="total"><td>Resultado por unidad</td><td class="amt ' + (resultado >= 0 ? 'pos' : 'negt') + '">' + (resultado < 0 ? '−' : '') + usd(Math.abs(resultado)) + '</td></tr>');
+    body.innerHTML = rows.join('');
+  }
+
+  function drawBar(breakEven, promo) {
+    var MAX = 0.60;
+    var zg = $('zoneGreen'), zr = $('zoneRed'), mk = $('beMarker'), fl = $('beFlag'), dot = $('promoDot');
+
+    var dotPos = Math.min(Math.max(promo / MAX, 0), 1) * 100;
+    dot.style.left = dotPos + '%';
+
+    if (!isFinite(breakEven)) {
+      zg.style.width = '0%';
+      zr.style.width = '100%';
+      zr.style.borderRadius = '13px';
+      mk.style.display = 'none';
+      fl.style.display = 'none';
+      return;
+    }
+
+    var beClamped = Math.min(Math.max(breakEven / MAX, 0), 1) * 100;
+    zg.style.width = beClamped + '%';
+    zr.style.width = (100 - beClamped) + '%';
+    zg.style.borderRadius = beClamped >= 100 ? '13px' : '13px 0 0 13px';
+    zr.style.borderRadius = beClamped <= 0 ? '13px' : '0 13px 13px 0';
+
+    var visible = breakEven >= 0 && breakEven <= MAX;
+    mk.style.display = visible ? 'block' : 'none';
+    fl.style.display = visible ? 'block' : 'none';
+    if (visible) {
+      mk.style.left = beClamped + '%';
+      fl.style.left = Math.min(Math.max(beClamped, 8), 92) + '%';
+      fl.textContent = 'BE ' + fmtPct.format(breakEven * 100) + '%';
+    }
+  }
+
+  // --- Eventos ---
+  Object.keys(inputs).forEach(function (k) {
+    inputs[k].addEventListener('input', recalc);
+    inputs[k].addEventListener('change', recalc);
+  });
+
+  $('resetBtn').addEventListener('click', function () {
+    try { localStorage.removeItem(LS_KEY); } catch (e) {}
+    Object.keys(DEFAULTS).forEach(function (k) {
+      if (typeof DEFAULTS[k] === 'boolean') inputs[k].checked = DEFAULTS[k];
+      else inputs[k].value = DEFAULTS[k];
+    });
+    recalc();
+  });
+
+  loadState();
+  recalc();
+})();
+</script>
+</body>
+</html>
