@@ -993,7 +993,18 @@
     { d: 'TML — comida inventario', v: 66.73 }
   ];
   var gastos = [];
-  var selItems = [];
+  var profCats = null;   // valor real por tipo de producto (proforma)
+  var sigaCats = null;   // impuestos por partida arancelaria (SIGA)
+
+  var CATS = [
+    { k: 'alfombras', label: 'Alfombras', re: /alfombra|carpet|rug/i, hs: ['5703'] },
+    { k: 'cremalleras', label: 'Cremalleras', re: /cremallera|zipper/i, hs: ['9607'] },
+    { k: 'fundasRegalo', label: 'Fundas de regalo', re: /funda\s*de\s*regalo|gift\s*bag/i, hs: ['4819'] },
+    { k: 'mantas', label: 'Mantas', re: /manta|blanket/i, hs: ['6301'] },
+    { k: 'muebles', label: 'Muebles (sofás, mesas, sillas)', re: /sofa|sofá|mesa|silla|dining|chair/i, hs: ['9401'] },
+    { k: 'textiles', label: 'Ropa de cama y cojines', re: /cushion|coj|four|duvet|sheet|king|pillow/i, hs: ['6302'] },
+    { k: 'otros', label: 'Otros', re: /./, hs: [] }
+  ];
 
   function loadImp() {
     var saved = {};
@@ -1003,11 +1014,12 @@
     });
     if (!$('impTC').value) $('impTC').value = 59.94;
     gastos = Array.isArray(saved.gastos) ? saved.gastos : GASTOS_DEFAULT.map(function (g) { return { d: g.d, v: g.v }; });
-    selItems = Array.isArray(saved.selItems) ? saved.selItems : [];
+    profCats = saved.profCats || null;
+    sigaCats = saved.sigaCats || null;
   }
 
   function saveImp() {
-    var state = { gastos: gastos, selItems: selItems };
+    var state = { gastos: gastos, profCats: profCats, sigaCats: sigaCats };
     IMP_FIELDS.forEach(function (k) {
       var v = parseFloat($(k).value);
       if (isFinite(v)) state[k] = v;
@@ -1083,7 +1095,7 @@
       var wb = XLSX.read(buf, { type: 'array' });
       var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true });
 
-      var merc = 0, alf = 0, comision = 0, gastoLocal = 0, total = NaN;
+      var merc = 0, alf = 0, comision = 0, gastoLocal = 0, total = NaN, catAcc = {};
       // columna de T.VALOR: buscar en la fila de encabezado
       var colVal = 9, colDes = 2;
       rows.forEach(function (r) {
@@ -1107,11 +1119,15 @@
         if (/^\s*total\s*$/i.test(joined) && !isFinite(total)) { total = firstNum(r); return; }
         if (r[0] != null && r[0] !== '' && typeof r[colVal] === 'number') {
           merc += r[colVal];
-          if (typeof r[colDes] === 'string' && /alfombra/i.test(r[colDes])) alf += r[colVal];
+          var des = typeof r[colDes] === 'string' ? r[colDes] : '';
+          if (/alfombra/i.test(des)) alf += r[colVal];
+          var cat = CATS.find(function (c) { return c.re.test(des); }) || CATS[CATS.length - 1];
+          catAcc[cat.k] = (catAcc[cat.k] || 0) + r[colVal];
         }
       });
       if (!isFinite(total)) total = merc + comision + gastoLocal;
       if (merc <= 0) throw new Error('No encontré renglones de mercancía. Revisa el formato.');
+      profCats = catAcc;
 
       $('impSup').value = total.toFixed(2);
       $('impMerc').value = merc.toFixed(2);
@@ -1157,25 +1173,18 @@
       var mDua = text.match(new RegExp('Declaraci.{0,2}n\\s*Unica\\s*Aduanera\\s*:?\\s*\\$?\\s*' + NUM, 'i'));
       var tasas = (mTasa ? parseNum(mTasa[1]) : 0) + (mDua ? parseNum(mDua[1]) : 0);
 
-      // Renglones con selectivo: arancel + descripción + 7 números (cant, fob, cif, grav, sel, itbis, total)
-      var reIt = new RegExp('(\\d{4}\\.\\d{2}\\.\\d{2})\\s+(.*?)\\s*' + [NUM, NUM, NUM, NUM, NUM, NUM, NUM].join('\\s+'), 'g');
-      var mi, idx = 0;
-      selItems = [];
+      // Renglones: arancel + descripción + 7 números (cant, fob, cif, grav, sel, itbis, total)
+      // Se agrupan por partida arancelaria (primeros 4 dígitos) para el factor por tipo
+      var reIt = new RegExp('(\\d{4})\\.\\d{2}\\.\\d{2}\\s+.*?\\s*' + [NUM, NUM, NUM, NUM, NUM, NUM, NUM].join('\\s+'), 'g');
+      var mi, agg = {};
       while ((mi = reIt.exec(text)) !== null) {
-        idx++;
-        var selV = parseNum(mi[7]);
-        if (selV > 0) {
-          selItems.push({
-            n: idx,
-            a: mi[1],
-            d: mi[2].replace(/NO\s*APLICA/ig, '').replace(/Unidades|Metros\s*Cuadrados|CHINA/ig, '').replace(/\s+/g, ' ').trim(),
-            c: parseNum(mi[3]),
-            fob: parseNum(mi[4]),
-            cif: parseNum(mi[5]),
-            s: selV
-          });
-        }
+        var hs = mi[1];
+        if (!agg[hs]) agg[hs] = { grav: 0, sel: 0, n: 0 };
+        agg[hs].grav += parseNum(mi[5]);
+        agg[hs].sel += parseNum(mi[6]);
+        agg[hs].n++;
       }
+      sigaCats = agg;
 
       $('impGravRD').value = grav.toFixed(2);
       $('impSelRD').value = sel.toFixed(2);
@@ -1204,7 +1213,7 @@
 
     if (sup <= 0 || tc <= 0) {
       out.innerHTML = '<p class="note" style="margin:0">Sube los documentos o llena los valores a mano.</p>';
-      renderSelTable(tc);
+      $('selTableWrap').innerHTML = '';
       return;
     }
 
@@ -1216,66 +1225,82 @@
 
     var landed = sup + gastosUSD + gravUSD + selUSD + tasasUSD;
     var factor = landed / sup;
-    var factorComun = (landed - selUSD) / sup;      // sin selectivo: aplica a todo
-    var alfSup = merc > 0 ? alfV * (sup / merc) : 0; // costo alfombras con su parte de comisión
-    var factorAlf = alfSup > 0 ? factorComun + selUSD / alfSup : null;
+    // Factor para preciar producto por producto: sobre el precio de proforma,
+    // absorbiendo comisión y gastos que no están en el precio unitario
+    var factorProd = merc > 0 ? landed / merc : factor;
 
     var html = '<table><tbody>';
     html += '<tr><td>Suplidor (mercancía + comisión + gastos China)</td><td class="amt">' + usd(sup) + '</td></tr>';
     html += '<tr><td>Gastos locales RD</td><td class="amt">' + usd(gastosUSD) + '</td></tr>';
     html += '<tr><td>Gravamen</td><td class="amt">' + usd(gravUSD) + '</td></tr>';
-    html += '<tr><td>Selectivo (solo alfombras)</td><td class="amt">' + usd(selUSD) + '</td></tr>';
+    html += '<tr><td>Selectivo</td><td class="amt">' + usd(selUSD) + '</td></tr>';
     html += '<tr><td>Tasa servicio + DUA</td><td class="amt">' + usd(tasasUSD) + '</td></tr>';
     html += '<tr class="skip"><td>ITBIS aduanal (crédito fiscal, no costo)</td><td class="amt">' + usd(itbisUSD) + '</td></tr>';
     html += '<tr class="total"><td>Landed real (sin ITBIS)</td><td class="amt">' + usd(landed) + '</td></tr>';
     html += '</tbody></table>';
-    html += '<div class="factorline">Factor del contenedor: <strong>×' + factor.toFixed(2) + '</strong></div>';
-    if (factorAlf && selUSD > 0) {
-      html += '<div class="factorline" style="font-size:12.5px; color:var(--text-soft)">Alfombras: ×' + factorAlf.toFixed(2) + ' · Resto: ×' + factorComun.toFixed(2) + '</div>';
-    }
-    html += '<button class="applybtn" id="btnAplicar">Aplicar al simulador (factor ×' + factor.toFixed(2) + ' + inventario ' + usd(landed) + ')</button>';
+    html += '<div class="factorline">Factor por producto (× precio de proforma): <strong>×' + factorProd.toFixed(2) + '</strong></div>';
+    html += '<div class="factorline" style="font-size:12.5px; color:var(--text-soft)">Sobre el total pagado al suplidor: ×' + factor.toFixed(2) + '</div>';
+    html += '<button class="applybtn" id="btnAplicar">Aplicar al simulador (factor ×' + factorProd.toFixed(2) + ' + inventario ' + usd(landed) + ')</button>';
     out.innerHTML = html;
 
     $('btnAplicar').addEventListener('click', function () {
-      inputs.factor.value = Math.min(Math.max(factor, 1.20), 2.20).toFixed(2);
+      inputs.factor.value = Math.min(Math.max(factorProd, 1.20), 2.20).toFixed(2);
       inputs.facIncItbis.checked = false;   // este factor ya viene limpio de ITBIS
       inputs.inv.value = Math.round(landed);
       recalc();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
-    renderSelTable(tc);
+    renderFactorTable(tc, sup, merc, gastosUSD, tasasUSD, landed);
   }
 
-  function renderSelTable(tc) {
+  function renderFactorTable(tc, sup, merc, gastosUSD, tasasUSD, landed) {
     var wrap = $('selTableWrap');
-    if (!selItems.length) { wrap.innerHTML = ''; return; }
+    if (!profCats || !sigaCats || !(merc > 0) || !(tc > 0)) { wrap.innerHTML = ''; return; }
 
-    var sumCif = 0, sumSel = 0;
-    var rows = selItems.map(function (it) {
-      sumCif += it.cif;
-      sumSel += it.s;
+    // Gastos comunes (comisión, gastos China, gastos locales, tasas) prorrateados por valor
+    var commonRate = ((sup - merc) + gastosUSD + tasasUSD) / merc;
+    var claimed = {};
+    CATS.forEach(function (c) { c.hs.forEach(function (h) { claimed[h] = true; }); });
+
+    function taxesFor(c) {
+      var t = 0;
+      if (c.k === 'otros') {
+        Object.keys(sigaCats).forEach(function (h) { if (!claimed[h]) t += (sigaCats[h].grav + sigaCats[h].sel) / tc; });
+      } else {
+        c.hs.forEach(function (h) { if (sigaCats[h]) t += (sigaCats[h].grav + sigaCats[h].sel) / tc; });
+      }
+      return t;
+    }
+
+    var sumVal = 0, sumTax = 0, sumLanded = 0;
+    var rows = CATS.map(function (c) {
+      var val = profCats[c.k] || 0;
+      if (val <= 0) return '';
+      var tax = taxesFor(c);
+      var landedC = val * (1 + commonRate) + tax;
+      sumVal += val; sumTax += tax; sumLanded += landedC;
       return '<tr>' +
-        '<td>' + it.n + '</td>' +
-        '<td>' + it.d + ' <span style="color:var(--text-soft)">(' + it.a + ')</span></td>' +
-        '<td class="amt">' + fmtMoney.format(it.c) + '</td>' +
-        '<td class="amt">' + fmtMoney.format(it.fob) + '</td>' +
-        '<td class="amt">' + fmtMoney.format(it.cif) + '</td>' +
-        '<td class="amt">' + fmtMoney.format(it.s) + '</td>' +
-        '<td class="amt">' + (tc > 0 ? fmtMoney.format(it.s / tc) : '—') + '</td>' +
+        '<td>' + c.label + '</td>' +
+        '<td class="amt">' + usd(val) + '</td>' +
+        '<td class="amt">' + usd(tax) + '</td>' +
+        '<td class="amt">' + usd(landedC) + '</td>' +
+        '<td class="amt"><strong>×' + (landedC / val).toFixed(2) + '</strong></td>' +
         '</tr>';
     }).join('');
 
     wrap.innerHTML =
       '<table style="margin-top:24px">' +
-      '<caption>Renglones con impuesto selectivo (no recuperable — cárgalo al precio de estos productos)</caption>' +
-      '<thead><tr><th>#</th><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">FOB unit. US$</th><th style="text-align:right">CIF RD$</th><th style="text-align:right">Selectivo RD$</th><th style="text-align:right">Selectivo US$</th></tr></thead>' +
+      '<caption>Factor por tipo de producto (impuestos reales de cada partida + gastos comunes prorrateados ' + fmtPct.format(commonRate * 100) + '%)</caption>' +
+      '<thead><tr><th>Tipo</th><th style="text-align:right">Valor proforma US$</th><th style="text-align:right">Gravamen + selectivo US$</th><th style="text-align:right">Landed US$</th><th style="text-align:right">Factor</th></tr></thead>' +
       '<tbody>' + rows +
-      '<tr class="total"><td></td><td>Total (' + selItems.length + ' renglones)</td><td></td><td></td>' +
-      '<td class="amt">' + fmtMoney.format(sumCif) + '</td>' +
-      '<td class="amt">' + fmtMoney.format(sumSel) + '</td>' +
-      '<td class="amt">' + (tc > 0 ? fmtMoney.format(sumSel / tc) : '—') + '</td></tr>' +
-      '</tbody></table>';
+      '<tr class="total"><td>Total contenedor</td>' +
+      '<td class="amt">' + usd(sumVal) + '</td>' +
+      '<td class="amt">' + usd(sumTax) + '</td>' +
+      '<td class="amt">' + usd(sumLanded) + '</td>' +
+      '<td class="amt pos">×' + (sumLanded / sumVal).toFixed(2) + '</td></tr>' +
+      '</tbody></table>' +
+      '<p class="note" style="margin-top:8px">El factor de cada tipo multiplica el precio unitario de la proforma. Úsalo como "Factor FOB → landed" en la sección 1 al preciar productos de ese tipo (con el checkbox de ITBIS aduanal desmarcado).</p>';
   }
 
   IMP_FIELDS.forEach(function (k) {
@@ -1287,7 +1312,8 @@
     IMP_FIELDS.forEach(function (k) { $(k).value = ''; });
     $('impTC').value = 59.94;
     gastos = GASTOS_DEFAULT.map(function (g) { return { d: g.d, v: g.v }; });
-    selItems = [];
+    profCats = null;
+    sigaCats = null;
     $('fileProforma').value = '';
     $('fileSiga').value = '';
     setStatus('stProforma', '');
