@@ -247,6 +247,12 @@
     cursor: pointer; font-family: inherit;
   }
   .applybtn:disabled { opacity: .4; cursor: default; }
+  .usebtn {
+    background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent);
+    padding: 4px 12px; border-radius: 7px; font-size: 12px; font-weight: 700;
+    cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .usebtn:hover { background: var(--accent); color: #fff; }
   .factorline { font-size: 14px; margin: 10px 0 2px; }
   .factorline strong { font-size: 19px; color: var(--accent); }
   .bigcard.good { background: var(--green-bg); border-color: var(--green-border); }
@@ -406,7 +412,7 @@
 
       <div class="field">
         <label for="factor">Factor FOB → landed <span class="val" id="factorVal"></span></label>
-        <input type="range" id="factor" min="1.20" max="2.20" step="0.01" value="1.60">
+        <input type="range" id="factor" min="1.00" max="2.20" step="0.01" value="1.60">
       </div>
 
       <div class="subhead">Cargas (% sobre el precio de venta neto)</div>
@@ -1244,7 +1250,7 @@
     out.innerHTML = html;
 
     $('btnAplicar').addEventListener('click', function () {
-      inputs.factor.value = Math.min(Math.max(factorProd, 1.20), 2.20).toFixed(2);
+      inputs.factor.value = Math.min(Math.max(factorProd, 1.00), 2.20).toFixed(2);
       inputs.facIncItbis.checked = false;   // este factor ya viene limpio de ITBIS
       inputs.inv.value = Math.round(landed);
       recalc();
@@ -1279,28 +1285,43 @@
       if (val <= 0) return '';
       var tax = taxesFor(c);
       var landedC = val * (1 + commonRate) + tax;
+      var f = landedC / val;
       sumVal += val; sumTax += tax; sumLanded += landedC;
       return '<tr>' +
         '<td>' + c.label + '</td>' +
         '<td class="amt">' + usd(val) + '</td>' +
         '<td class="amt">' + usd(tax) + '</td>' +
         '<td class="amt">' + usd(landedC) + '</td>' +
-        '<td class="amt"><strong>×' + (landedC / val).toFixed(2) + '</strong></td>' +
+        '<td class="amt"><strong>×' + f.toFixed(2) + '</strong></td>' +
+        '<td class="amt"><button class="usebtn" data-factor="' + f.toFixed(2) + '" data-tipo="' + c.label + '">Usar ×' + f.toFixed(2) + '</button></td>' +
         '</tr>';
     }).join('');
 
+    var fTot = sumVal > 0 ? sumLanded / sumVal : 0;
     wrap.innerHTML =
       '<table style="margin-top:24px">' +
       '<caption>Factor por tipo de producto (impuestos reales de cada partida + gastos comunes prorrateados ' + fmtPct.format(commonRate * 100) + '%)</caption>' +
-      '<thead><tr><th>Tipo</th><th style="text-align:right">Valor proforma US$</th><th style="text-align:right">Gravamen + selectivo US$</th><th style="text-align:right">Landed US$</th><th style="text-align:right">Factor</th></tr></thead>' +
+      '<thead><tr><th>Tipo</th><th style="text-align:right">Valor proforma US$</th><th style="text-align:right">Gravamen + selectivo US$</th><th style="text-align:right">Landed US$</th><th style="text-align:right">Factor</th><th></th></tr></thead>' +
       '<tbody>' + rows +
       '<tr class="total"><td>Total contenedor</td>' +
       '<td class="amt">' + usd(sumVal) + '</td>' +
       '<td class="amt">' + usd(sumTax) + '</td>' +
       '<td class="amt">' + usd(sumLanded) + '</td>' +
-      '<td class="amt pos">×' + (sumLanded / sumVal).toFixed(2) + '</td></tr>' +
+      '<td class="amt pos">×' + fTot.toFixed(2) + '</td>' +
+      '<td class="amt"><button class="usebtn" data-factor="' + fTot.toFixed(2) + '" data-tipo="Total contenedor">Usar ×' + fTot.toFixed(2) + '</button></td></tr>' +
       '</tbody></table>' +
-      '<p class="note" style="margin-top:8px">El factor de cada tipo multiplica el precio unitario de la proforma. Úsalo como "Factor FOB → landed" en la sección 1 al preciar productos de ese tipo (con el checkbox de ITBIS aduanal desmarcado).</p>';
+      '<p class="note" style="margin-top:8px">"Usar" carga ese factor como "Factor FOB → landed" en la sección 1 (con el checkbox de ITBIS aduanal desmarcado). Pon el precio de proforma del producto en la casilla de costo FOB.</p>';
+
+    wrap.querySelectorAll('.usebtn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var f = parseFloat(btn.getAttribute('data-factor'));
+        if (!isFinite(f)) return;
+        inputs.factor.value = Math.min(Math.max(f, 1.00), 2.20).toFixed(2);
+        inputs.facIncItbis.checked = false;   // factor ya limpio de ITBIS
+        recalc();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
   }
 
   IMP_FIELDS.forEach(function (k) {
