@@ -601,8 +601,8 @@
         <div>
           <div class="subhead" style="margin-top:0; padding-top:0; border-top:none">Documentos</div>
           <div class="field">
-            <label for="fileProforma">Proforma del suplidor (.xlsx)</label>
-            <input type="file" id="fileProforma" accept=".xlsx,.xls">
+            <label for="fileProforma">Proforma / factura del suplidor (.xlsx, .xls, .csv)</label>
+            <input type="file" id="fileProforma" accept=".xlsx,.xls,.xlsm,.csv">
           </div>
           <div class="filestatus" id="stProforma"></div>
           <div class="field">
@@ -1090,7 +1090,138 @@
 
   function parseNum(s) { return parseFloat(String(s).replace(/,/g, '')); }
 
-  // --- Proforma (.xlsx): total pagado, mercancía, alfombras ---
+  // --- Proforma / factura (.xlsx, .xls, .csv): total pagado, mercancía, alfombras ---
+  // Reconoce distintos formatos de suplidor: busca la fila de encabezado por sinónimos
+  // (T.VALOR / TOTAL / AMOUNT / IMPORTE…, DESCRIPCION / PRODUCTO / ITEM…), revisa todas
+  // las hojas, acepta números escritos como texto ("1,234.56", "US$ 250") y, si no hay
+  // columna de total, multiplica cantidad × precio unitario.
+  var HDR = {
+    val: /^(t\.?\s*valor|(valor|precio|price|importe|monto|value)?\s*total\w*(\s*(usd|us\$|\$|rd\$|eur|rmb|cny|value|price|amount|fob|cif|neto|net))?|(line\s*|ext\.?\s*|extended\s*|total\s*)?amount(\s*(usd|us\$|\$|rd\$|eur|rmb|cny))?|importe|monto|sub\s*-?\s*total|fob\s*total|total\s*fob)$/i,
+    des: /^(des\w*|descripci[oó]n|description|productos?|product(\s*name)?|items?(\s*name|\s*description)?|art[ií]culos?|nombre|name|goods|mercanc[ií]a|concepto|detalle|detail|modelo?|model)$/i,
+    qty: /^(cant\.?(idad)?|qty\.?|quantity|pcs|pieces|unidades|units?|ctd\.?|q)$/i,
+    pu:  /^(p\.?\s*u\.?|p\.?\s*unit\.?|precio(\s*unit\w*)?|unit\s*price|price|precio\s*fob|fob(\s*price)?|u\.?\s*price|valor\s*unit\w*|unitario)(\s*(usd|us\$|\$|rd\$|eur|rmb|cny|each|c\/u))?$/i
+  };
+  var KEYROW = {
+    comision: /comisi|commission/i,
+    gastoLocal: /gasto\s*local|local\s*(charge|expense|cost)/i,
+    flete: /flete|freight|shipping|env[ií]o/i,
+    seguro: /seguro|insurance/i,
+    descuento: /descuento|discount|rebaja/i,
+    total: /total/i,
+    skip: /dep[oó]sito|deposit|anticipo|advance|balance|saldo|pago|payment|banco|bank|swift|iban|cuenta|account|nota|note|observaci|remark/i
+  };
+  function normHdr(c) { return String(c).replace(/[()\[\]:\n\r]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  function isNumLike(c) { return typeof c === 'number' || (typeof c === 'string' && /^\s*[-$€¥£]*\s*(us\$|rd\$|usd|rmb|cny|eur)?\s*[-\d.,]+\s*(usd|us\$|rd\$|rmb|cny|eur)?\s*$/i.test(c) && /\d/.test(c)); }
+  function toNum(c) {
+    if (typeof c === 'number') return isFinite(c) ? c : NaN;
+    if (!isNumLike(c)) return NaN;
+    var s = c.replace(/[^\d.,\-]/g, '');
+    if (!s) return NaN;
+    // "1.234,56" (coma decimal) vs "1,234.56"
+    if (/,\d{1,2}$/.test(s) && !/\.\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+    var n = parseFloat(s);
+    return isFinite(n) ? n : NaN;
+  }
+  function lastNumIn(r) {
+    for (var j = r.length - 1; j >= 0; j--) { var v = toNum(r[j]); if (isFinite(v)) return v; }
+    return NaN;
+  }
+  // Fila de encabezado: la que más sinónimos de columnas junte en las primeras 60 filas.
+  function detectHeader(rows) {
+    var best = null;
+    for (var i = 0; i < Math.min(rows.length, 60); i++) {
+      var r = rows[i]; if (!r) continue;
+      var m = { row: i, val: -1, des: -1, qty: -1, pu: -1, score: 0, names: {} };
+      for (var j = 0; j < r.length; j++) {
+        if (typeof r[j] !== 'string') continue;
+        var h = normHdr(r[j]); if (!h) continue;
+        if (m.val < 0 && HDR.val.test(h)) { m.val = j; m.score += 2; m.names.val = h; }
+        else if (m.des < 0 && HDR.des.test(h)) { m.des = j; m.score += 2; m.names.des = h; }
+        else if (m.qty < 0 && HDR.qty.test(h)) { m.qty = j; m.score += 1; m.names.qty = h; }
+        else if (m.pu < 0 && HDR.pu.test(h)) { m.pu = j; m.score += 1; m.names.pu = h; }
+      }
+      var ok = m.des >= 0 && (m.val >= 0 || (m.qty >= 0 && m.pu >= 0));
+      if (ok && (!best || m.score > best.score)) best = m;
+    }
+    return best;
+  }
+  // Sin encabezado reconocible: columna numérica más a la derecha con ≥3 valores,
+  // y como descripción la columna de texto con más caracteres.
+  function guessColumns(rows) {
+    var numCount = {}, strLen = {}, maxLen = 0;
+    rows.forEach(function (r) {
+      if (!r) return;
+      if (r.length > maxLen) maxLen = r.length;
+      r.forEach(function (c, j) {
+        if (isNumLike(c)) numCount[j] = (numCount[j] || 0) + 1;
+        else if (typeof c === 'string' && c.trim()) strLen[j] = (strLen[j] || 0) + c.length;
+      });
+    });
+    var val = -1, des = -1, bestLen = 0;
+    for (var j = maxLen - 1; j >= 0; j--) if ((numCount[j] || 0) >= 3) { val = j; break; }
+    Object.keys(strLen).forEach(function (j) { if (+j !== val && strLen[j] > bestLen) { bestLen = strLen[j]; des = +j; } });
+    return (val >= 0 && des >= 0) ? { row: -1, val: val, des: des, qty: -1, pu: -1, guessed: true, names: {} } : null;
+  }
+  function headersSeen(rows) {
+    var out = [];
+    for (var i = 0; i < Math.min(rows.length, 15) && out.length < 12; i++) {
+      (rows[i] || []).forEach(function (c) { if (typeof c === 'string' && c.trim() && out.length < 12) out.push(c.trim().slice(0, 25)); });
+    }
+    return out;
+  }
+  function parseProformaSheet(rows) {
+    var cols = detectHeader(rows) || guessColumns(rows);
+    if (!cols) return null;
+    var res = { merc: 0, alf: 0, n: 0, comision: 0, gastoLocal: 0, flete: 0, seguro: 0, descuento: 0, total: NaN, catAcc: {}, cols: cols };
+    for (var i = cols.row + 1; i < rows.length; i++) {
+      var r = rows[i]; if (!r || !r.length) continue;
+      var strs = r.filter(function (c) { return typeof c === 'string' && c.trim() && !isNumLike(c); });
+      if (!strs.length) continue;
+      var joined = strs.join(' ');
+      var des = (cols.des >= 0 && typeof r[cols.des] === 'string' && !isNumLike(r[cols.des])) ? r[cols.des].trim() : '';
+      // Fila especial (total, comisión, flete…): la descripción está vacía o es una etiqueta corta.
+      var label = (!des || (des.length < 40 && strs.length <= 2)) ? joined : '';
+      if (label) {
+        var lastNum = lastNumIn(r);
+        if (KEYROW.comision.test(label)) { if (!res.comision) res.comision = lastNum || 0; continue; }
+        if (KEYROW.gastoLocal.test(label)) { if (!res.gastoLocal) res.gastoLocal = lastNum || 0; continue; }
+        if (KEYROW.flete.test(label)) { if (!res.flete) res.flete = lastNum || 0; continue; }
+        if (KEYROW.seguro.test(label)) { if (!res.seguro) res.seguro = lastNum || 0; continue; }
+        if (KEYROW.descuento.test(label)) { if (!res.descuento) res.descuento = Math.abs(lastNum) || 0; continue; }
+        if (KEYROW.total.test(label)) { if (isFinite(lastNum) && !/sub\s*-?\s*total/i.test(label)) res.total = lastNum; continue; }
+        if (KEYROW.skip.test(label)) continue;
+      }
+      var v = toNum(r[cols.val]);
+      if (!isFinite(v) && cols.qty >= 0 && cols.pu >= 0) {
+        var q = toNum(r[cols.qty]), p = toNum(r[cols.pu]);
+        if (isFinite(q) && isFinite(p)) v = q * p;
+      }
+      if (!des) des = strs[0] || '';
+      if (!des || !isFinite(v) || v === 0) continue;
+      res.merc += v; res.n++;
+      if (/alfombra|carpet|rug/i.test(des)) res.alf += v;
+      var cat = CATS.find(function (c) { return c.re.test(des); }) || CATS[CATS.length - 1];
+      res.catAcc[cat.k] = (res.catAcc[cat.k] || 0) + v;
+    }
+    return res;
+  }
+  function parseProformaWorkbook(wb) {
+    var best = null, seen = [];
+    wb.SheetNames.forEach(function (name) {
+      var ws = wb.Sheets[name]; if (!ws || !ws['!ref']) return;
+      var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: false });
+      if (!seen.length) seen = headersSeen(rows);
+      var res = parseProformaSheet(rows);
+      if (res && res.n > 0 && (!best || res.merc > best.merc)) { res.sheet = name; best = res; }
+    });
+    if (!best) {
+      var hint = seen.length ? ' Encabezados vistos: ' + seen.join(', ') + '.' : '';
+      throw new Error('No encontré renglones de mercancía.' + hint + ' Necesito una columna de descripción (DESCRIPCIÓN / PRODUCTO / ITEM) y una de valor (T.VALOR / TOTAL / AMOUNT / IMPORTE), o cantidad + precio unitario.');
+    }
+    return best;
+  }
+
   $('fileProforma').addEventListener('change', function () {
     var f = this.files[0];
     if (!f) return;
@@ -1098,47 +1229,29 @@
     ensureXlsx().then(function () {
       return f.arrayBuffer();
     }).then(function (buf) {
-      var wb = XLSX.read(buf, { type: 'array' });
-      var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true });
-
-      var merc = 0, alf = 0, comision = 0, gastoLocal = 0, total = NaN, catAcc = {};
-      // columna de T.VALOR: buscar en la fila de encabezado
-      var colVal = 9, colDes = 2;
-      rows.forEach(function (r) {
-        if (!r) return;
-        r.forEach(function (c, i) {
-          if (typeof c === 'string') {
-            if (/T\.?\s*VALOR/i.test(c)) colVal = i;
-            if (/^DES/i.test(c.trim())) colDes = i;
-          }
-        });
-      });
-      function firstNum(r) {
-        for (var i = 0; i < r.length; i++) if (typeof r[i] === 'number') return r[i];
-        return NaN;
-      }
-      rows.forEach(function (r) {
-        if (!r) return;
-        var joined = r.filter(function (c) { return typeof c === 'string'; }).join(' ');
-        if (/comisi/i.test(joined) && !comision) { comision = firstNum(r) || 0; return; }
-        if (/gasto\s*local/i.test(joined) && !gastoLocal) { gastoLocal = firstNum(r) || 0; return; }
-        if (/^\s*total\s*$/i.test(joined) && !isFinite(total)) { total = firstNum(r); return; }
-        if (r[0] != null && r[0] !== '' && typeof r[colVal] === 'number') {
-          merc += r[colVal];
-          var des = typeof r[colDes] === 'string' ? r[colDes] : '';
-          if (/alfombra/i.test(des)) alf += r[colVal];
-          var cat = CATS.find(function (c) { return c.re.test(des); }) || CATS[CATS.length - 1];
-          catAcc[cat.k] = (catAcc[cat.k] || 0) + r[colVal];
-        }
-      });
-      if (!isFinite(total)) total = merc + comision + gastoLocal;
-      if (merc <= 0) throw new Error('No encontré renglones de mercancía. Revisa el formato.');
-      profCats = catAcc;
+      // En CSV/TXT se leen las celdas como texto para respetar comas decimales ("144,00").
+      var isCsv = /\.(csv|txt)$/i.test(f.name);
+      var wb = XLSX.read(buf, { type: 'array', cellDates: false, raw: isCsv });
+      var p = parseProformaWorkbook(wb);
+      var extras = p.comision + p.gastoLocal + p.flete + p.seguro - p.descuento;
+      var total = p.total;
+      // Si la fila "Total" del archivo no cuadra (p.ej. es un subtotal parcial), se reconstruye.
+      if (!isFinite(total) || total < p.merc * 0.9) total = p.merc + extras;
+      profCats = p.catAcc;
 
       $('impSup').value = total.toFixed(2);
-      $('impMerc').value = merc.toFixed(2);
-      $('impAlf').value = alf.toFixed(2);
-      setStatus('stProforma', 'OK — mercancía ' + usd(merc) + ', total con comisión y gastos ' + usd(total), 'ok');
+      $('impMerc').value = p.merc.toFixed(2);
+      $('impAlf').value = p.alf.toFixed(2);
+      var how = p.cols.guessed ? 'columnas detectadas por contenido'
+        : 'col. ' + (p.cols.names.val || (p.cols.names.qty + ' × ' + p.cols.names.pu));
+      var where = p.n + ' renglones' + (wb.SheetNames.length > 1 ? ' en hoja "' + p.sheet + '"' : '') + ', ' + how;
+      var det = [];
+      if (p.comision) det.push('comisión ' + usd(p.comision));
+      if (p.gastoLocal) det.push('gasto local ' + usd(p.gastoLocal));
+      if (p.flete) det.push('flete ' + usd(p.flete));
+      if (p.seguro) det.push('seguro ' + usd(p.seguro));
+      if (p.descuento) det.push('descuento −' + usd(p.descuento));
+      setStatus('stProforma', 'OK — ' + where + ' — mercancía ' + usd(p.merc) + ', total ' + usd(total) + (det.length ? ' (' + det.join(', ') + ')' : ''), 'ok');
       recalcImport();
     }).catch(function (e) {
       setStatus('stProforma', 'Error: ' + e.message, 'err');
